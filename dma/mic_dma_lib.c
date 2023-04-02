@@ -1559,6 +1559,8 @@ mic_dma_proc_reg_open(struct inode *inode, struct file *file)
 	return single_open(file, mic_dma_proc_reg_show, PDE_DATA(inode));
 }
 
+
+/* see https://stackoverflow.com/questions/61295277/passing-argument-4-of-proc-create-from-incompatible-pointer-type */
 struct proc_ops micdma_ring_fops = {
 	.proc_open		= mic_dma_proc_ring_open,
 	.proc_read		= seq_read,
