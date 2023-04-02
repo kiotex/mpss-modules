@@ -66,6 +66,7 @@
 #include <linux/semaphore.h>
 #include <linux/kthread.h>
 #include <linux/sched.h>
+#include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
@@ -80,6 +81,66 @@
 #include <linux/netdevice.h>
 #include <linux/debugfs.h>
 #include "mic/micscif_kmem_cache.h"
+
+
+#ifndef MMAP_LOCK_INITIALIZER
+/* Define mmap locking API for pre-5.8 kernels. */
+/* from https://stackoverflow.com/questions/71600159/struct-mm-struct-has-no-member-named-mmap-sem-error-in-the-module-build-afte */
+
+/* This one should not be needed in a driver. */
+static inline void mmap_init_lock(struct mm_struct *mm)
+{
+       init_rwsem(&mm->mmap_sem);
+}
+
+static inline void mmap_write_lock(struct mm_struct *mm)
+{
+       down_write(&mm->mmap_sem);
+}
+
+static inline int mmap_write_lock_killable(struct mm_struct *mm)
+{
+       return down_write_killable(&mm->mmap_sem);
+}
+
+static inline bool mmap_write_trylock(struct mm_struct *mm)
+{
+       return down_write_trylock(&mm->mmap_sem) != 0;
+}
+
+static inline void mmap_write_unlock(struct mm_struct *mm)
+{
+       up_write(&mm->mmap_sem);
+}
+
+static inline void mmap_write_downgrade(struct mm_struct *mm)
+{
+       downgrade_write(&mm->mmap_sem);
+}
+
+static inline void mmap_read_lock(struct mm_struct *mm)
+{
+       down_read(&mm->mmap_sem);
+}
+
+static inline int mmap_read_lock_killable(struct mm_struct *mm)
+{
+       return down_read_killable(&mm->mmap_sem);
+}
+
+static inline bool mmap_read_trylock(struct mm_struct *mm)
+{
+       return down_read_trylock(&mm->mmap_sem) != 0;
+}
+
+static inline void mmap_read_unlock(struct mm_struct *mm)
+{
+       up_read(&mm->mmap_sem);
+}
+
+#endif /* MMAP_LOCK_INITIALIZER */
+
+
 
 struct rma_mmu_notifier {
 #ifdef CONFIG_MMU_NOTIFIER
@@ -916,18 +977,21 @@ static inline int __scif_dec_pinned_vm_lock(struct mm_struct *mm,
 {
 	if (mm && nr_pages && mic_ulimit_check) {
 		if (try_lock) {
-			if (!down_write_trylock(&mm->mmap_sem)) {
+			//if (!down_write_trylock(&mm->mmap_sem)) {
+			if (!mmap_write_trylock(mm)) {
 				return -1;
 			}
 		} else {
-			down_write(&mm->mmap_sem);
+			//down_write(&mm->mmap_sem);
+			mmap_write_lock(mm);
 		}
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
 		atomic64_sub(nr_pages, &mm->pinned_vm);
 #else
 		mm->locked_vm -= nr_pages;
 #endif
-		up_write(&mm->mmap_sem);
+		//up_write(&mm->mmap_sem);
+		mmap_write_unlock(mm);
 	}
 	return 0;
 }
