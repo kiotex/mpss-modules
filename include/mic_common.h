@@ -54,7 +54,15 @@ extern "C" {
 #include <linux/jiffies.h>
 #include <linux/timer.h>
 #include <linux/irqflags.h>
-#include <linux/time.h>
+
+
+#include <linux/time.h> 
+#include <linux/ktime.h>
+
+
+
+
+
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 #include <linux/semaphore.h>

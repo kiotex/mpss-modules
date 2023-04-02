@@ -37,10 +37,16 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
+
+
+
+
+
 #include <micint.h>
 
 #include <scif.h>
 #include <mic_common.h>
+
 
 #define ACPT_BACKLOG 120
 #define ACPT_POLL_MS 2000
@@ -56,12 +62,13 @@
 static acptboot_data_t *acptboot_data;
 
 
+
 void acptboot_getconn(struct work_struct *work)
 {
 	mic_ctx_t *node_ctx;
 	struct scif_portID data;
 	scif_epd_t conn_epd;
-	struct timespec tod;
+	struct timespec64 tod;
 	int proto;
 	int version;
 	int err;
@@ -101,7 +108,7 @@ void acptboot_getconn(struct work_struct *work)
 		break;
 
 	case ACPT_REQUEST_TIME:
-		getnstimeofday(&tod);
+		ktime_get_real_ts64(&tod);
 		proto = ACPT_TIME_DATA;
 		scif_send(conn_epd, &proto, sizeof(proto), SCIF_SEND_BLOCK);
 		scif_send(conn_epd, &tod, sizeof(tod), SCIF_SEND_BLOCK);
