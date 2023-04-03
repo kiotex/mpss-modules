@@ -41,7 +41,7 @@ static int micvcons_open(struct tty_struct * tty, struct file * filp);
 static void micvcons_close(struct tty_struct * tty, struct file * filp);
 static int micvcons_write(struct tty_struct * tty, const unsigned char *buf, 
 								int count);
-static int micvcons_write_room(struct tty_struct *tty);
+static unsigned int micvcons_write_room(struct tty_struct *tty);
 static void micvcons_set_termios(struct tty_struct *tty, struct ktermios * old);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,14,0)
 static void micvcons_timeout(unsigned long);
@@ -84,8 +84,8 @@ micvcons_create(int num_bds)
 	if (micvcons_tty)
 		goto exit;
 
-	micvcons_tty = alloc_tty_driver(num_bds);
-	if (!micvcons_tty) {
+	micvcons_tty = tty_alloc_driver(num_bds, 0);
+	if (IS_ERR(micvcons_tty)) {
 		ret = -ENOMEM;
 		goto exit;
 	}
@@ -110,7 +110,7 @@ micvcons_create(int num_bds)
 
 	if ((ret = tty_register_driver(micvcons_tty)) != 0) {
 		printk("Failed to register vcons tty driver\n");
-		put_tty_driver(micvcons_tty);
+		tty_driver_kref_put(micvcons_tty);
 		micvcons_tty = NULL;
 		goto exit;
 	}
@@ -163,7 +163,7 @@ exit:
 
 void micvcons_destroy(int num_bds)
 {
-	int bd, ret;
+	int bd;
 	micvcons_port_t *port;
 
 	if (!micvcons_tty)
@@ -173,12 +173,9 @@ void micvcons_destroy(int num_bds)
 		destroy_workqueue(port->dp_wq);
 		tty_unregister_device(micvcons_tty, bd);
 	}
-	ret = tty_unregister_driver(micvcons_tty);
-	put_tty_driver(micvcons_tty);
+	tty_unregister_driver(micvcons_tty);
+	tty_driver_kref_put(micvcons_tty);
 	micvcons_tty = NULL;
-
-	if (ret)
-		printk(KERN_ERR "tty unregister_driver failed with code %d\n", ret);
 }
 
 static int
@@ -310,7 +307,7 @@ exit:
 	return bytes;
 }
 
-static int
+static unsigned int
 micvcons_write_room(struct tty_struct *tty)
 {
 	micvcons_port_t *port = (micvcons_port_t *)tty->driver_data;
