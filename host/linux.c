@@ -736,15 +736,22 @@ mic_get_file_size(const char* fn, uint32_t* file_len)
 	struct file *filp;
 	loff_t filp_size;
 	uint32_t status = 0;
-	mm_segment_t fs = get_fs();
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+	mm_segment_t fs = get_fs();
 	set_fs(KERNEL_DS);
 
 	if (!fn || IS_ERR(filp = filp_open(fn, 0, 0))) {
 		status = EINVAL;
-		goto cleanup_fs;
+		set_fs(fs);
+		return status;
 	}
-
+#else
+	if (!fn || IS_ERR(filp = filp_open(fn, 0, 0))) {
+		status = EINVAL;
+		return status;
+	}
+#endif
 	filp_size = GET_FILE_SIZE_FROM_INODE(filp);
 	if (filp_size <= 0) {
 		status = EINVAL;
@@ -752,11 +759,11 @@ mic_get_file_size(const char* fn, uint32_t* file_len)
 	}
 
 	*file_len = filp_size;
+	return 0;
+
 cleanup_filp:
 	filp_close(filp, current->files);
-cleanup_fs:
-	set_fs(fs);
-	return status;
+	return 0;
 }
 
 // loads file from hdd into pci physical memory
@@ -768,6 +775,7 @@ mic_load_file(const char* fn, uint8_t* buffer, uint32_t max_size)
 	struct file *filp;
 	loff_t filp_size, pos = 0;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 	mm_segment_t fs = get_fs();
 	set_fs(KERNEL_DS);
 
@@ -782,17 +790,40 @@ mic_load_file(const char* fn, uint8_t* buffer, uint32_t max_size)
 	}
 
 	c = vfs_read(filp, buffer, filp_size, &pos);
+
+#else
+
+
+	if (!fn || IS_ERR(filp = filp_open(fn, 0, 0))) {
+		status = EINVAL;
+	    return status;
+	}
+
+	filp_size = GET_FILE_SIZE_FROM_INODE(filp);
+	if (filp_size <= 0) {
+		goto cleanup_filp;
+	}
+
+    c = kernel_read(filp, buffer, filp_size, &pos);
+
+#endif
 	if(c != (long)filp_size) {
 		status = -1; //FIXME
 		goto cleanup_filp;
 	}
 
+
 cleanup_filp:
 	filp_close(filp, current->files);
+    return status;
+
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 cleanup_fs:
 	set_fs(fs);
-
 	return status;
+#endif
+
 }
 
 module_init(mic_init);
